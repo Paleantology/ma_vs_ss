@@ -1,0 +1,67 @@
+---
+title: "BF_calulations"
+author: "April Wright"
+date: "2023-11-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Let's get some Bayes Factors from our posterior traces.
+
+```{r}
+library(tidyverse)
+library(RevGadgets)
+```
+
+
+
+
+Next, some helper variables. These are the log BF scores that correspond to weak, substantial, and strong BF support.
+
+```{r}
+BF <- c(3.2, 10, 100)
+p = BF/(1+BF)
+```
+
+And calculate the BF and best model:
+
+```{r}
+setwd("~/Downloads/output/")
+post_probs = c()
+best_models = c()
+file_list <- list.files(path = ".", pattern = ".log")
+
+for (file in file_list){
+
+log <-  read.table(file, sep = "\t", header = TRUE)
+
+count <- log  %>% 
+     group_by(model_indicator) %>% 
+     summarize(count = n())
+
+pp <- max(count$count)/sum(count$count)
+post_probs <- c(post_probs, pp)
+m_i <- count %>% slice(which.max(count))
+model = m_i[1]$model_indicator
+best_models <- c(best_models, model)
+}
+master_table <- cbind(file_list, best_models, post_probs)
+write.csv(master_table, "batch4_master.csv")
+
+```
+
+```{r}
+
+plotTrace(trace = trace,
+          vars = c("model_indicator"))[[1]] +
+          ylim(0,1) +
+          geom_hline(yintercept=0.33, linetype="solid", color = "black") +
+          geom_hline(yintercept=p, linetype=c("longdash","dashed","dotted"), color = "red") +
+          geom_hline(yintercept=1-p, linetype=c("longdash","dashed","dotted"), color = "red") +
+     # modify legend location using ggplot2
+     theme(legend.position = c(0.40,0.825))
+
+```

@@ -1,0 +1,50 @@
+---
+title: "MA_compare"
+author: "April Wright"
+date: "2025-01-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Now that we did MA_processing and got spreadsheets for our batches of results, now we can compare those results to 2016's results, which were collected with Bayes Factor. Let's process in the 2016 data and get our best models.
+
+```{r}
+old_data <- read_csv("data/master_table.csv")
+
+best_model_old <- old_data %>% 
+  pivot_longer(Infinity:`10`, names_to = "colname") %>% 
+  group_by(`file_list`) %>% 
+  mutate(max = max(value), 
+         type = colname[which.max(value)]) %>% 
+  pivot_wider(everything(), names_from = "colname", values_from = "value") %>% 
+  relocate(max, type, .after = `10`)
+```
+
+Now, we'll look at the best models for the new data.
+
+```{r}
+batch4 <- read.csv("MA_spreads/batch4_master.csv")
+batch7 <- read.csv("MA_spreads/batch7_master.csv")
+batch11 <- read.csv("MA_spreads/batch11_master.csv")
+
+big_table <- rbind(batch11, batch7, batch4)
+
+```
+
+And we join our current results to the prior ones
+
+```{r}
+joined_data <- full_join(best_model_old, big_table,by = "file_list")
+joined<- joined_data %>% 
+  select(max, type, best_models,post_probs) %>% 
+  drop_na(best_models, post_probs)
+
+best <- joined$best_models
+best <- best %>%  str_replace_all(c("6" = "Infinity", "5" = "Ten", "4" = "2", "3" = "1", "2" = ".2", "1" = ".05"))
+joined$best_models <- best
+```
+
+

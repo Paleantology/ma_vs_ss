@@ -1,0 +1,105 @@
+morpho <- readDiscreteCharacterData("file.nex")
+species <- morpho.taxa()
+n_taxa <- morpho.ntaxa()
+moves = VectorMoves()
+monitors = VectorMonitors()
+
+###############################
+# Topology and branch lengths #
+###############################
+
+# 2n - 3 branches for an unrooted tree of n taxa
+n_branches := 2 * n_taxa - 3
+
+# Exploit the fact that in all of our Nexus files, the (most distant) outgroup is listed first
+outgroups = clade(species[1])
+
+# Draw a topology from a uniform distribution
+topology ~ dnUniformTopology(species, outgroup=outgroups)
+moves.append( mvNNI(topology, weight=n_branches/2.0) )
+moves.append( mvSPR(topology, weight=n_branches/10.0) )
+#Default MrBayes prior on branch lengths
+for (i in 1:n_branches) {
+    brlens[i] ~ dnExp(10.0)
+    moves.append( mvScale(brlens[i], weight=1) )
+ }
+# Assemble a phylogram by combining the tree topology with branch lengths
+psi := fnTreeAssembly(topology, brlens)
+# Tree length monitor
+tree_length := psi.treeLength()
+
+#############################################
+# Across-character rate heterogeneity model #
+#############################################
+
+# Default MrBayes prior on the shape of the gamma distribution
+alpha_morpho ~ dnExp(1.0)
+char_rates := fnDiscretizeGamma( alpha_morpho, alpha_morpho, 4 )
+moves.append( mvScale(alpha_morpho, lambda=1, weight=2.0) )
+
+#######################
+# Substitution models #
+#######################
+  
+alpha_dir <- 1
+
+# How many distinct matrices we want in the mixture: MrBayes default
+n_cats = 5
+
+unord <- morpho
+unord.setNumStatesPartition(2)
+nc = unord[i - 1].nchar()
+print("There are "+nc+" binary unordered characters in the matrix.")
+
+for (i in 1:n_cats) {
+     # Dirichlet prior on equilibrium state frequencies
+     pi[i] ~ dnDirichlet( rep(alpha_dir, 2) )
+     moves.append( mvSimplexElementScale(pi[i], alpha=10, weight=1.0) )
+
+     # Create a 2-by-2 rate matrix
+     Qu[i] := fnF81( pi[i] )
+}
+
+matrix_probs[idx] ~ dnDirichlet( rep(1.0, n_cats) )
+moves.append( mvBetaSimplex(matrix_probs[idx], weight=3.0) )
+moves.append( mvDirichletSimplex(matrix_probs[idx], weight=1.5) )
+
+for (i in 1:n_cats) {
+     Q_upper[i] := Qu[idx][i][1][2] * matrix_probs[i]
+     Q_lower[i] := Qu[idx][i][2][1] * matrix_probs[i]
+}
+
+avg_01_rate := mean(Q_upper)
+avg_10_rate := mean(Q_lower) 
+                    
+# Combine everything into a CTMC
+unord_ctmc ~ dnPhyloCTMC(tree=psi, Q=Qu, siteRates=char_rates, siteMatrices=matrix_probs,
+                         type="Standard", coding="variable")
+# Clamp to the data
+unord_ctmc.clamp(unord)
+  
+############
+# Analysis #
+############
+
+# Initialize the model object
+mymodel = model(psi)
+
+# Add monitors
+monitors.append( mnModel(filename="output/file.log", avg_01_rate, avg_10_rate, printgen=1000) )
+monitors.append( mnFile(filename="output/file.trees", printgen=1000, psi) )
+monitors.append( mnScreen(printgen=100) )
+
+# Initialize the MCMC object and run the analysis
+mymcmc = mcmc(mymodel, monitors, moves)
+mymcmc.run(generations=3000000, checkpointInterval=500, checkpointFile = "output/file.state")
+
+# Read in the tree trace
+trace = readTreeTrace("output/file.trees", treetype="non-clock")
+trace.setBurnin(0.25)
+
+# Summarize the tree trace
+mapTree(trace, file="output/file.map.tre")
+# Using a cutoff of 0 to imitate the "allcompat" option in MrBayes
+consensusTree(trace, file="output/file.majrule.tre", cutoff=0)
+q()

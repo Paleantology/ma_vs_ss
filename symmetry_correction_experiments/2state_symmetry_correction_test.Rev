@@ -1,0 +1,102 @@
+seed(42069)
+n_cats = 10000
+alpha_dir <- 1
+printSeed()
+print("")
+
+for (i in 1:n_cats)  
+{
+    pi[i] ~ dnDirichlet( rep(alpha_dir, 2) )
+    Q[i] := fnF81( pi[i] )
+}
+
+# Define some helper variables
+
+for (i in 1:n_cats)
+{
+    pi_1[i] := pi[i][1]
+    pi_2[i] := pi[i][2]
+
+    q_01[i] := Q[i][1][2]
+    q_10[i] := Q[i][2][1]
+}
+
+#####################################################################
+# Show that when averaged across a large number of categories, the  #
+# stationary frequencies of all states tend to equality (at 1/2):   #
+#####################################################################
+ 
+# Use abs() to convert Probability -> RealPos:
+vec_of_freq_means := [ mean(abs(pi_1)), mean(abs(pi_2)) ]
+
+print("Mean equilibrium frequencies:")
+print(vec_of_freq_means)
+print("Range: [" + min(vec_of_freq_means) + ", " + max(vec_of_freq_means) + "]")
+print("Variance: " + var(vec_of_freq_means))
+print("")
+
+#####################################################################
+# Show that even when averaged across a large number of categories, #
+# the instantaneous rates do NOT tend to equality:                  #
+#####################################################################
+
+vec_of_rate_means := [mean(q_01), mean(q_10)]
+
+print("Mean instantaneous rates:")
+print(vec_of_rate_means)
+print("Range: [" + min(vec_of_rate_means) + ", " + max(vec_of_rate_means) + "]")
+print("Variance: " + var(vec_of_rate_means))
+print("")
+
+# In a real script, we will have to iterate over characters with different
+# numbers of states, in which case having to use the full formula for the
+# normalizing constant would be inconvenient (since the number of terms in it
+# depends on the number of states). We will instead employ a user-defined
+# function to calculate it for us from an arbitrary state frequency vector.
+
+# NOTE: It is essential to include the return type ("Real") in the function
+# declaration, otherwise we would not be able to wrap the result in a
+# deterministic node! See https://github.com/revbayes/revbayes/issues/533
+
+function Real get_F81_normalizing_constant(pi_vect)
+{
+    # get the sum of squares of the state frequencies
+    for (i in 1:pi_vect.size())
+    {
+        squares[i] = (pi_vect[i])^2
+    }
+    sum_of_squares = sum(squares)
+
+    # subtract from unity
+    return 1 - sum_of_squares
+}
+
+# Get preliminary values for category probabilities from the F81 normalizing
+# constants:
+
+for (i in 1:n_cats)
+{
+    matrix_probs_prelim[i] := get_F81_normalizing_constant( pi[i] )
+}
+
+# Normalize
+matrix_probs := matrix_probs_prelim / sum(matrix_probs_prelim)
+
+#########################################################################
+# Show it works: across a large number of categories, PROPERLY WEIGHTED #
+# means of the instantaneous rates DO tend to equality:                 #
+#########################################################################
+
+for (i in 1:n_cats) {
+    q_01_weighted[i] := q_01[i] * matrix_probs[i]
+    q_10_weighted[i] := q_10[i] * matrix_probs[i]
+}
+
+vec_of_w_rate_means := [mean(q_01_weighted), mean(q_10_weighted)]
+
+print("Weighted mean instantaneous rates:")
+print(vec_of_w_rate_means)
+print("Range: [" + min(vec_of_w_rate_means) + ", " + max(vec_of_w_rate_means) + "]")
+print("Variance: " + var(vec_of_w_rate_means))
+
+q()

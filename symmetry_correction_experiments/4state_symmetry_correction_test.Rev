@@ -1,0 +1,128 @@
+seed(42069)
+n_cats = 10000
+alpha_dir <- 1
+printSeed()
+print("")
+
+for (i in 1:n_cats)  
+{
+    pi[i] ~ dnDirichlet( rep(alpha_dir, 4) )
+    Q[i] := fnF81( pi[i] )
+}
+
+# Define some helper variables
+
+for (i in 1:n_cats)
+{
+    pi_1[i] := pi[i][1]
+    pi_2[i] := pi[i][2]
+    pi_3[i] := pi[i][3]
+    pi_4[i] := pi[i][4]
+
+    q_01[i] := Q[i][1][2]
+    q_02[i] := Q[i][1][3]
+    q_03[i] := Q[i][1][4]
+    q_12[i] := Q[i][2][3]
+    q_13[i] := Q[i][2][4]
+    q_23[i] := Q[i][3][4]
+    q_10[i] := Q[i][2][1]
+    q_20[i] := Q[i][3][1]
+    q_30[i] := Q[i][4][1]
+    q_21[i] := Q[i][3][2]
+    q_31[i] := Q[i][4][2]
+    q_32[i] := Q[i][4][3]
+}
+
+#####################################################################
+# Show that when averaged across a large number of categories, the  #
+# stationary frequencies of all states tend to equality (at 1/3):   #
+#####################################################################
+ 
+# Use abs() to convert Probability -> RealPos:
+vec_of_freq_means := [ mean(abs(pi_1)), mean(abs(pi_2)), mean(abs(pi_3)), mean(abs(pi_4)) ]
+
+print("Mean equilibrium frequencies:")
+print(vec_of_freq_means)
+print("Range: [" + min(vec_of_freq_means) + ", " + max(vec_of_freq_means) + "]")
+print("Variance: " + var(vec_of_freq_means))
+print("")
+
+#####################################################################
+# Show that even when averaged across a large number of categories, #
+# the instantaneous rates do NOT tend to equality:                  #
+#####################################################################
+
+vec_of_rate_means := [mean(q_01), mean(q_02), mean(q_03), mean(q_12), mean(q_13), mean(q_23),
+                      mean(q_10), mean(q_20), mean(q_30), mean(q_21), mean(q_31), mean(q_32)]
+
+print("Mean instantaneous rates:")
+print(vec_of_rate_means)
+print("Range: [" + min(vec_of_rate_means) + ", " + max(vec_of_rate_means) + "]")
+print("Variance: " + var(vec_of_rate_means))
+print("")
+
+# In a real script, we will have to iterate over characters with different
+# numbers of states, in which case having to use the full formula for the
+# normalizing constant would be inconvenient (since the number of terms in it
+# depends on the number of states). We will instead employ a user-defined
+# function to calculate it for us from an arbitrary state frequency vector.
+
+# NOTE: It is essential to include the return type ("Real") in the function
+# declaration, otherwise we would not be able to wrap the result in a
+# deterministic node! See https://github.com/revbayes/revbayes/issues/533
+
+function Real get_F81_normalizing_constant(pi_vect)
+{
+    # get the sum of squares of the state frequencies
+    for (i in 1:pi_vect.size())
+    {
+        squares[i] = (pi_vect[i])^2
+    }
+    sum_of_squares = sum(squares)
+
+    # subtract from unity
+    return 1 - sum_of_squares
+}
+
+# Get preliminary values for category probabilities from the F81 normalizing
+# constants:
+
+for (i in 1:n_cats)
+{
+    matrix_probs_prelim[i] := get_F81_normalizing_constant( pi[i] )
+}
+
+# Normalize
+matrix_probs := matrix_probs_prelim / sum(matrix_probs_prelim)
+
+#########################################################################
+# Show it works: across a large number of categories, PROPERLY WEIGHTED #
+# means of the instantaneous rates DO tend to equality:                 #
+#########################################################################
+
+for (i in 1:n_cats) {
+    q_01_weighted[i] := q_01[i] * matrix_probs[i]
+    q_02_weighted[i] := q_02[i] * matrix_probs[i]
+    q_03_weighted[i] := q_03[i] * matrix_probs[i]
+    q_12_weighted[i] := q_12[i] * matrix_probs[i]
+    q_13_weighted[i] := q_13[i] * matrix_probs[i]
+    q_23_weighted[i] := q_23[i] * matrix_probs[i]
+    q_10_weighted[i] := q_10[i] * matrix_probs[i]
+    q_20_weighted[i] := q_20[i] * matrix_probs[i]
+    q_30_weighted[i] := q_30[i] * matrix_probs[i]
+    q_21_weighted[i] := q_21[i] * matrix_probs[i]
+    q_31_weighted[i] := q_31[i] * matrix_probs[i]
+    q_32_weighted[i] := q_32[i] * matrix_probs[i]
+}
+
+vec_of_w_rate_means := [mean(q_01_weighted), mean(q_02_weighted), mean(q_03_weighted),
+                        mean(q_12_weighted), mean(q_13_weighted), mean(q_23_weighted),
+                        mean(q_10_weighted), mean(q_20_weighted), mean(q_30_weighted),
+                        mean(q_21_weighted), mean(q_31_weighted), mean(q_32_weighted)]
+
+print("Weighted mean instantaneous rates:")
+print(vec_of_w_rate_means)
+print("Range: [" + min(vec_of_w_rate_means) + ", " + max(vec_of_w_rate_means) + "]")
+print("Variance: " + var(vec_of_w_rate_means))
+
+q()

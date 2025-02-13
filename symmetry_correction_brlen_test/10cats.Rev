@@ -91,7 +91,7 @@ function Real get_F81_normalizing_constant(pi_vect)
 unord <- morpho
 unord.setNumStatesPartition(2)
 nc = unord.nchar()
-print("There are "+nc+" unordered characters with "+i+" states in the matrix.")
+print("There are "+nc+" binary characters in the matrix.")
 
 for (j in 1:n_cats) {
     # Dirichlet prior on equilibrium state frequencies

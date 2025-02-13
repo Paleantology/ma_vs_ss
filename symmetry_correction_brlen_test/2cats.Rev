@@ -135,7 +135,7 @@ mymodel = model(psi)
 # Add monitors
 monitors.append( mnModel(filename="symmetry_correction_brlen_test/2cats.log",   printgen=295) )
 monitors.append( mnFile( filename="symmetry_correction_brlen_test/2cats.trees", printgen=295, psi) )
-monitors.append( mnScreen(mean_q_01_weighted, mean_q_10_weighted, printgen=100) )
+monitors.append( mnScreen(tree_length, mean_q_01_weighted, mean_q_10_weighted, printgen=100) )
 
 # Initialize the MCMC object and run the analysis
 mymcmc = mcmc(mymodel, monitors, moves, nruns=2)

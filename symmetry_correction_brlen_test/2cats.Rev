@@ -141,12 +141,12 @@ monitors.append( mnScreen(tree_length, mean_q_01_weighted, mean_q_10_weighted, p
 mymcmc = mcmc(mymodel, monitors, moves, nruns=2)
 
 if (fileExists("symmetry_correction_brlen_test/2cats_run_1.ckp")) {
-   mymcmc.initializeFromCheckpoint("symmetry_correction_brlen_test/2cats_run_1.ckp")
+   mymcmc.initializeFromCheckpoint("symmetry_correction_brlen_test/2cats.ckp")
 }
 
 # Approximately 100 million moves
 mymcmc.run(generations=295000, checkpointInterval=295,
-           checkpointFile = "symmetry_correction_brlen_test/2cats_run_1.ckp")
+           checkpointFile = "symmetry_correction_brlen_test/2cats.ckp")
 
 # Read in the tree trace
 trace = readTreeTrace("symmetry_correction_brlen_test/2cats.trees", treetype="non-clock", nruns=2)

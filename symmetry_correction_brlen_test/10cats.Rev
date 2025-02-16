@@ -149,8 +149,9 @@ mymcmc.run(generations=290000, checkpointInterval=290,
            checkpointFile = "symmetry_correction_brlen_test/10cats_run_1.ckp")
 
 # Read in the tree trace
-trace = readTreeTrace("symmetry_correction_brlen_test/10cats.trees", treetype="non-clock")
-trace.setBurnin(0.25)
+trace = readTreeTrace("symmetry_correction_brlen_test/10cats.trees", treetype="non-clock", nruns=2)
+trace[1].setBurnin(0.25)
+trace[2].setBurnin(0.25)
 
 # Summarize
 mapTree(trace, file="symmetry_correction_brlen_test/10cats.map.tre")

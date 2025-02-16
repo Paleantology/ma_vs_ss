@@ -1,0 +1,150 @@
+########################################################################
+# We will test the effect of the symmetry correction on branch         #
+# lengths. The correction decreases the weighted mean of instantaneous #
+# rate by a factor that is proportional to the number of mixture       #
+# categories. Either this is automatically compensated for by          #
+# renormalizing, or we need to compensate for it ourselves by          #
+# adjusting the branch length prior accordingly. We will test this by  #
+# re-running the exact same analysis with 2 and 10 categories. This    #
+# file specifies:                                                      #
+                                                                       #
+n_cats <- 10                                                           #
+                                                                       #
+# If the branch lengths yielded by the analysis with 2 categories are, #
+# on average, 5 times longer than in the analysis with 10 categories,  #
+# we will know that the rates are not automatically renormalized.      #
+########################################################################
+
+setwd("/Users/David/Grive/ma_vs_ss/")
+seed(12345)
+
+# Largest non-supertree matrix
+morpho <- readDiscreteCharacterData("data/Andrade_etal_2011a.nex.final")
+
+species <- morpho.taxa()
+n_taxa <- morpho.ntaxa()
+moves = VectorMoves()
+monitors = VectorMonitors()
+
+###############################
+# Topology and branch lengths #
+###############################
+
+# 2n - 3 branches for an unrooted tree of n taxa
+n_branches := 2 * n_taxa - 3
+
+# Exploit the fact that in all of our Nexus files, the (most distant) outgroup is listed first
+outgroups = clade(species[1])
+
+# Draw a topology from a uniform distribution
+topology ~ dnUniformTopology(species, outgroup=outgroups)
+moves.append( mvNNI(topology, weight=n_branches/2.0) )
+moves.append( mvSPR(topology, weight=n_branches/10.0) )
+
+#Default MrBayes prior on branch lengths
+for (i in 1:n_branches) {
+    brlens[i] ~ dnExp(10.0)
+    moves.append( mvScale(brlens[i], weight=1) )
+}
+
+# Assemble a phylogram by combining the tree topology with branch lengths
+psi := fnTreeAssembly(topology, brlens)
+
+# Tree length monitor
+tree_length := psi.treeLength()
+
+#############################################
+# Across-character rate heterogeneity model #
+#############################################
+
+# Default MrBayes prior on the shape of the gamma distribution
+alpha_morpho ~ dnExp(1.0)
+char_rates := fnDiscretizeGamma( alpha_morpho, alpha_morpho, 4 )
+moves.append( mvScale(alpha_morpho, lambda=1, weight=2.0) )
+
+#######################
+# Substitution models #
+#######################
+
+# NOTE: It is essential to include the return type ("Real") in the function
+# declaration, otherwise we would not be able to wrap the result in a
+# deterministic node! See https://github.com/revbayes/revbayes/issues/533
+
+function Real get_F81_normalizing_constant(pi_vect)
+{
+    # get the sum of squares of the state frequencies
+    for (i in 1:pi_vect.size())
+    {
+        squares[i] = (pi_vect[i])^2
+    }
+    sum_of_squares = sum(squares)
+
+    # subtract from unity
+    return 1 - sum_of_squares
+}
+
+# ---------------------------------------------------------------- #
+# Start out with a flat Dirichlet prior (alpha hyperparameter = 1) #
+# ---------------------------------------------------------------- #
+
+# To keep everything simple, we will restrict the analysis to binary characters
+unord <- morpho
+unord.setNumStatesPartition(2)
+nc = unord.nchar()
+print("There are "+nc+" binary characters in the matrix.")
+
+for (j in 1:n_cats) {
+    # Dirichlet prior on equilibrium state frequencies
+    pi[j] ~ dnDirichlet( rep(1, 2) )
+    moves.append( mvSimplexElementScale(pi[j], alpha=10, weight=1.0) )
+
+    # Create an i-by-i rate matrix
+    Qu[j] := fnF81( pi[j] )
+
+    # Get the corresponding (unnormalized) mixture weight
+    matrix_probs_prelim[j] := get_F81_normalizing_constant( pi[j] )
+}
+
+# Normalize mixture weights
+# Need abs() to convert Real -> RealPos
+matrix_probs := simplex(abs(matrix_probs_prelim))
+
+# Monitor the variables of interest
+for (j in 1:n_cats) {
+    q_01_weighted[j] := Qu[j][1][2] * matrix_probs[j]
+    q_10_weighted[j] := Qu[j][2][1] * matrix_probs[j]
+}
+
+mean_q_01_weighted := mean(q_01_weighted)
+mean_q_10_weighted := mean(q_10_weighted)
+
+# Combine everything into a CTMC
+unord_ctmc ~ dnPhyloCTMC(tree=psi, Q=Qu, siteRates=char_rates,
+                         siteMatrices=matrix_probs, type="Standard",
+                         coding="variable")
+# Clamp to the data
+unord_ctmc.clamp(unord)
+
+############
+# Analysis #
+############
+
+# Initialize the model object
+mymodel = model(psi)
+mymodel.ignoreAllData()
+
+# Add monitors. We are not really interested in sampling trees here.
+monitors.append( mnModel(filename="symmetry_correction_brlen_test/10cats_no_data.log",   printgen=290) )
+monitors.append( mnScreen(tree_length, mean_q_01_weighted, mean_q_10_weighted, printgen=100) )
+
+# Initialize the MCMC object and run the analysis
+mymcmc = mcmc(mymodel, monitors, moves, nruns=2)
+
+if (fileExists("symmetry_correction_brlen_test/10cats_no_data_run_1.ckp")) {
+   mymcmc.initializeFromCheckpoint("symmetry_correction_brlen_test/10cats_no_data.ckp")
+}
+
+# Approximately 100 million moves
+mymcmc.run(generations=290000, checkpointInterval=290,
+           checkpointFile = "symmetry_correction_brlen_test/10cats_no_data.ckp")
+q()

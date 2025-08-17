@@ -29,7 +29,7 @@ p = BF/(1+BF)
 And calculate the BF and best model:
 
 ```{r}
-setwd("~/Downloads/output/")
+setwd("../output/")
 post_probs = c()
 best_models = c()
 file_list <- list.files(path = ".", pattern = ".log")
@@ -49,7 +49,7 @@ model = m_i[1]$model_indicator
 best_models <- c(best_models, model)
 }
 master_table <- cbind(file_list, best_models, post_probs)
-write.csv(master_table, "batch4_master.csv")
+write.csv(master_table, "batch6_master.csv")
 
 ```
 

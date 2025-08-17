@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 Now that we did MA_processing and got spreadsheets for our batches of results, now we can compare those results to 2016's results, which were collected with Bayes Factor. Let's process in the 2016 data and get our best models.
 
 ```{r}
-old_data <- read_csv("data/master_table.csv")
+old_data <- read_csv("../data/master_table.csv")
 
 best_model_old <- old_data %>% 
   pivot_longer(Infinity:`10`, names_to = "colname") %>% 
@@ -26,9 +26,9 @@ best_model_old <- old_data %>%
 Now, we'll look at the best models for the new data.
 
 ```{r}
-batch4 <- read.csv("MA_spreads/batch4_master.csv")
-batch7 <- read.csv("MA_spreads/batch7_master.csv")
-batch11 <- read.csv("MA_spreads/batch11_master.csv")
+batch4 <- read.csv("../MA_spreads/batch4_master.csv")
+batch7 <- read.csv("../MA_spreads/batch7_master.csv")
+batch11 <- read.csv("../MA_spreads/batch11_master.csv")
 
 big_table <- rbind(batch11, batch7, batch4)
 

@@ -1,0 +1,220 @@
+---
+title: "model_compare"
+author: "April Wright"
+date: "2023-09-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Read in data.
+
+```{r}
+library(tidyverse)
+library(reactable)
+bfs <- read_csv("../MA_spreads/master_table_name_synonymized.csv")
+avg <- read_csv("../MA_spreads/Model_averaging_results.csv")
+```
+
+Now, find the best fit model from Bayes Factors and add this as a column. Add a column with the max score in:
+
+
+```{r}
+labeled <- bfs %>%
+  mutate(...8 = NULL) %>% 
+  rowwise() %>%
+  group_by(`Dataset`) %>% 
+  mutate(maxval = max(c_across(everything())),
+         max = names(cur_data())[which.max(c_across(everything()))])
+
+```
+
+Getting the second max is a trick.
+
+```{r}
+second_highest = bfs %>% 
+  mutate(...8 = NULL) %>% 
+  mutate(row = row_number()) %>% 
+  pivot_longer(c(-`Dataset`, -row)) %>% 
+  group_by(row) %>% 
+  arrange(desc(value)) %>% 
+  filter(row_number() == 2) %>% 
+  ungroup()
+
+total_table <- inner_join(labeled, second_highest)
+
+```
+
+Now, we calculate our marginal liklelihood difference:
+
+```{r}
+calced <- total_table %>% 
+  mutate(diff = maxval - value)
+
+calced <- calced %>%
+  mutate(Jeff = case_when(diff < 3.2 ~ 'Barely',
+  3.2 < diff  ~ 'Substantial',
+  diff > 10 ~ 'Strong'))
+
+```
+
+Quick and dirty look at the results:
+
+```{r}
+reactable(calced, columns = list(
+  Jeff = colDef(
+    style = function(value, index) {
+      if (calced$Jeff[index] == "Barely") {
+        color <- "lightblue"
+      } else if (calced$Jeff[index] == "Substantial") {
+        color <- "lightgreen"
+      } else if (calced$Jeff[index] == "Strong") {
+        color <- "darkgreen"
+      }
+      list(color = color)
+    }
+  )
+))
+```
+
+Now, let's look at the MA data. First the best-fit model:
+
+```{r}
+labeled_avgs <- avg %>%
+  rowwise() %>%
+  group_by(Dataset) %>% 
+  mutate(max_avg = max(c_across(everything())),
+         avg_col = names(cur_data())[which.max(c_across(everything()))])
+
+```
+
+
+Next, the second-best:
+
+```{r}
+
+second_highest_avg = avg %>% 
+  mutate(row = row_number()) %>% 
+  pivot_longer(c(-Dataset, -row)) %>% 
+  group_by(row) %>% 
+  arrange(desc(value)) %>% 
+  filter(row_number() == 2) %>% 
+  ungroup()
+avg_table <- inner_join(labeled_avgs, second_highest_avg)
+
+```
+
+Some readability tweaks
+```{r}
+slimmed <- avg_table %>% 
+ select(max_avg, avg_col, name, value) %>% 
+ mutate(avg_col = replace(avg_col, avg_col == 1000, "Infinity")) %>% 
+ rename(second_best = name)
+```
+
+
+Next, join the BF and MA tables together:
+
+```{r}
+#calced <- rename(calced, Dataset = `Data Set`)
+#calced$Dataset <- sub(" ", "_", calced$Dataset)
+mega_table <- full_join(calced, slimmed, by="Dataset")
+mega_table
+```
+
+Next, we will drop datasets where there was no conflict between what MA and BF prefer. 
+
+```{r}
+
+mismatches <- mega_table %>% 
+  rename("second_choiceBF" =name) %>% 
+  filter(!(max == avg_col))
+
+
+mismatches
+
+```
+Let's make some summary stats on mismatches. What we can see is that about 2/3 of the mismatches come from datasets that had weakly-preferred models according to the BF. 
+
+```{r}
+support <- mismatches %>% 
+  group_by(Jeff) %>% 
+  count()
+
+support
+```
+
+However, we can also see that model averaging tends to prefer these preferred models more strongly - many almost exlcusively.
+```{r}
+ambiguity <- mismatches %>% 
+     group_by(group = cut(max_avg, breaks = seq(0, max(max_avg), .1))) %>%
+     count()
+
+ambiguity
+```
+
+So, what are the mismatch models?
+
+```{r}
+
+mismatches %>% 
+  group_by(max) %>% 
+  count()
+
+  
+
+```
+The largest group (about half the datasets) is transitioning between similar models alpha=10 to Infinity, or vice versa. In 52 of 129, the preferred model by MA is the second-choice model by BF.
+
+```{r}
+mismatches %>% 
+  filter(second_choiceBF == avg_col)
+
+```
+
+For another 11 datasets, the inverse is true, as well. The second choice dataset via MA is the one preferred via BF. 
+
+```{r}
+ mismatches %>% 
+  filter(second_best == max)
+
+```
+
+So what's going on in datasets where we aren't swapping between Mk and a slightly relaxed Mk. Definitely a tendency to move from preferring Mk or Mk-like models to more extreme ones. 
+
+```{r}
+not_just_mk <- mismatches %>% 
+  filter(!(max == "Infinity" & avg_col == "10"),
+         !(max == "10" & avg_col == "Infinity")) 
+not_just_mk %>% 
+  group_by(max, second_choiceBF, avg_col) %>% 
+  count()
+
+```
+
+
+To summarize. Most datasets are moving from one model to a similar one. Most of them are moving with poor support, but there are several instances of overturning datasets with reasonably strong support for one model over another.
+```{r}
+
+small_bf <- mismatches %>%
+  select(Dataset, max, Jeff)  %>% 
+  mutate(treatment = "BF")
+small_avg <- mismatches %>%
+  select(Dataset, avg_col, Jeff)  %>% 
+  rename(max = avg_col) %>% 
+  mutate(treatment = "avg")
+  
+stacked <- bind_rows(small_bf, small_avg)
+
+stacked$max <-factor(stacked$max,levels=c(0.05, 0.2, 1,2,10, "Infinity"))
+
+stacked %>% 
+  ggplot(aes(x=Dataset, y=max, color = Jeff)) +
+ # ggplot(aes(x = avg_col, y = max, color = max)) + 
+  geom_point() + 
+  geom_path(aes(group = Dataset))  +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 5))
+
+```
